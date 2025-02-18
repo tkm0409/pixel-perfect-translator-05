@@ -4,6 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const steps = [
   { id: 'upload', label: 'Upload File', icon: Upload },
@@ -11,6 +12,10 @@ const steps = [
   { id: 'review', label: 'Review & Edit', icon: Check },
   { id: 'finalize', label: 'Finalise & Submit', icon: Check },
 ];
+
+interface TableRow {
+  [key: string]: string;
+}
 
 const Index = () => {
   const [currentStep, setCurrentStep] = useState('upload');
@@ -20,13 +25,14 @@ const Index = () => {
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingRow, setEditingRow] = useState<number | null>(null);
-  const [tableData, setTableData] = useState([
-    { id: 1, name: 'John Doe', email: 'john@example.com', department: 'Engineering', status: 'Active' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', department: 'Marketing', status: 'Active' },
-    { id: 3, name: 'Mike Johnson', email: 'mike@example.com', department: 'Sales', status: 'Inactive' },
-    { id: 4, name: 'Sarah Brown', email: 'sarah@example.com', department: 'HR', status: 'Active' },
-    { id: 5, name: 'Tom Wilson', email: 'tom@example.com', department: 'Engineering', status: 'Active' },
-  ]);
+  const [tableData, setTableData] = useState<TableRow[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [processingSummary, setProcessingSummary] = useState({
+    completed: 0,
+    failed: 0,
+    processing: 0,
+    total: 0
+  });
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -71,26 +77,71 @@ const Index = () => {
     setFiles(files.filter((_, i) => i !== index));
   };
 
+  const processFiles = async (files: File[]) => {
+    setProcessing(true);
+    setCurrentStep('process');
+    let progress = 0;
+
+    try {
+      const results: TableRow[] = [];
+      let headers: string[] = [];
+      
+      for (const file of files) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length > 0) {
+          if (headers.length === 0) {
+            headers = jsonData[0] as string[];
+            setHeaders(headers);
+          }
+
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i] as any[];
+            const rowData: TableRow = {};
+            headers.forEach((header, index) => {
+              rowData[header] = row[index]?.toString() || '';
+            });
+            results.push(rowData);
+            
+            progress = Math.min(((i / jsonData.length) * 100), 100);
+            setProgress(progress);
+          }
+        }
+      }
+
+      const total = results.length;
+      const completed = results.filter(row => Object.values(row).every(val => val !== '')).length;
+      const failed = results.filter(row => Object.values(row).some(val => val === '')).length;
+
+      setProcessingSummary({
+        completed,
+        failed,
+        processing: 0,
+        total
+      });
+
+      setTableData(results);
+      setCurrentStep('review');
+    } catch (error) {
+      console.error('Error processing files:', error);
+      toast.error('Error processing files. Please check the file format.');
+      setCurrentStep('upload');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const processData = () => {
     if (files.length === 0) {
       toast.error('Please upload at least one file');
       return;
     }
-
-    setProcessing(true);
-    setCurrentStep('process');
-
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      setProgress(progress);
-      
-      if (progress >= 100) {
-        clearInterval(interval);
-        setCurrentStep('review');
-        setProcessing(false);
-      }
-    }, 200);
+    processFiles(files);
   };
 
   const renderUploadStep = () => (
@@ -176,48 +227,43 @@ const Index = () => {
           </div>
           <h3 className="text-2xl font-medium mb-3">Processing Your Data...</h3>
           <p className="text-gray-600 mb-8">
-            Our AI model is checking for errors, mapping data fields, and<br />
-            applying corrections. You will see a detailed breakdown once<br />
-            processing is complete.
+            Processing your files. This may take a few minutes depending on the file size.
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-8 mb-8">
           <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl font-semibold text-emerald-600">160</span>
+              <span className="text-3xl font-semibold text-emerald-600">{processingSummary.completed}</span>
               <Check className="text-emerald-600" />
             </div>
             <p className="text-sm text-emerald-700">Records Processing Completed</p>
           </div>
           <div className="bg-red-50/50 border border-red-100 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl font-semibold text-red-500">160</span>
+              <span className="text-3xl font-semibold text-red-500">{processingSummary.failed}</span>
               <X className="text-red-500" />
             </div>
             <p className="text-sm text-red-600">Records Processing Failed</p>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl font-semibold text-gray-700">90</span>
+              <span className="text-3xl font-semibold text-gray-700">{processingSummary.processing}</span>
               <Clock className="text-gray-600" />
             </div>
             <p className="text-sm text-gray-600">Records Processing</p>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl font-semibold text-gray-700">8</span>
-              <Clock className="text-gray-600" />
+              <span className="text-3xl font-semibold text-gray-700">{processingSummary.total}</span>
+              <FileText className="text-gray-600" />
             </div>
-            <p className="text-sm text-gray-600">Records Processing (min)</p>
+            <p className="text-sm text-gray-600">Total Records</p>
           </div>
         </div>
 
-        <button 
-          className="px-6 py-2 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          onClick={() => setCurrentStep('upload')}>
-          Cancel Processing
-        </button>
+        <Progress value={progress} className="h-2 mb-4" />
+        <p className="text-sm text-gray-500 mb-6">{Math.round(progress)}% Complete</p>
       </div>
     </div>
   );
@@ -231,40 +277,29 @@ const Index = () => {
             <div>
               <h3 className="text-2xl font-medium mb-2">Data Processing Complete!</h3>
               <p className="text-gray-600">
-                AI has successfully processed your data. Below is a breakdown of the records. Click on any category to review and make changes.
+                Successfully processed {processingSummary.completed} records. 
+                {processingSummary.failed > 0 && ` ${processingSummary.failed} records have missing or invalid data.`}
               </p>
             </div>
-          </div>
-          
-          <div className="space-y-4 mb-8">
-            <button className="w-full px-6 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Review Records
-            </button>
-            <button className="w-full px-6 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Edit or Fix any errors
-            </button>
-            <button className="w-full px-6 py-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Finalise and submit the processed data
-            </button>
           </div>
         </div>
 
         <div>
-          <h4 className="font-medium mb-4">Final Summary</h4>
+          <h4 className="font-medium mb-4">Processing Summary</h4>
           <div className="space-y-4 mb-6">
             <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-2xl font-semibold text-emerald-600">160</span>
+                <span className="text-2xl font-semibold text-emerald-600">{processingSummary.completed}</span>
                 <Check className="text-emerald-600" />
               </div>
               <p className="text-sm text-emerald-700">Records Processing Completed</p>
             </div>
             <div className="bg-red-50/50 border border-red-100 rounded-lg p-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-2xl font-semibold text-red-500">160</span>
+                <span className="text-2xl font-semibold text-red-500">{processingSummary.failed}</span>
                 <X className="text-red-500" />
               </div>
-              <p className="text-sm text-red-600">Records Processing Failed</p>
+              <p className="text-sm text-red-600">Records With Errors</p>
             </div>
           </div>
 
@@ -272,22 +307,11 @@ const Index = () => {
             <div className="w-48 h-48 rounded-full border-16 border-emerald-200">
               <div className="w-full h-full rounded-full border-16 border-red-200 relative">
                 <div className="absolute inset-0 flex items-center justify-center flex-col">
-                  <span className="text-2xl font-semibold">260</span>
+                  <span className="text-2xl font-semibold">{processingSummary.total}</span>
                   <span className="text-sm text-gray-500">Total Records</span>
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="flex justify-end space-x-4">
-            <button className="px-6 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              Cancel
-            </button>
-            <button 
-              className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-              onClick={() => setCurrentStep('finalize')}>
-              Review & Edit
-            </button>
           </div>
         </div>
       </div>
@@ -296,87 +320,35 @@ const Index = () => {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-6 py-3 text-left text-gray-500 font-medium">Name</th>
-              <th className="px-6 py-3 text-left text-gray-500 font-medium">Email</th>
-              <th className="px-6 py-3 text-left text-gray-500 font-medium">Department</th>
-              <th className="px-6 py-3 text-left text-gray-500 font-medium">Status</th>
+              {headers.map((header, index) => (
+                <th key={index} className="px-6 py-3 text-left text-gray-500 font-medium">
+                  {header}
+                </th>
+              ))}
               <th className="px-6 py-3 text-left text-gray-500 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {tableData.map((row, i) => (
-              <tr key={row.id} className="bg-white">
-                {editingRow === i ? (
-                  <>
-                    <td className="px-6 py-4">
+              <tr key={i} className="bg-white">
+                {headers.map((header, j) => (
+                  <td key={j} className="px-6 py-4">
+                    {editingRow === i ? (
                       <input 
                         type="text" 
-                        value={row.name}
+                        value={row[header]}
                         onChange={(e) => {
                           const newData = [...tableData];
-                          newData[i] = { ...row, name: e.target.value };
+                          newData[i] = { ...row, [header]: e.target.value };
                           setTableData(newData);
                         }}
                         className="w-full px-2 py-1 border rounded" 
                       />
-                    </td>
-                    <td className="px-6 py-4">
-                      <input 
-                        type="email" 
-                        value={row.email}
-                        onChange={(e) => {
-                          const newData = [...tableData];
-                          newData[i] = { ...row, email: e.target.value };
-                          setTableData(newData);
-                        }}
-                        className="w-full px-2 py-1 border rounded" 
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <select 
-                        value={row.department}
-                        onChange={(e) => {
-                          const newData = [...tableData];
-                          newData[i] = { ...row, department: e.target.value };
-                          setTableData(newData);
-                        }}
-                        className="w-full px-2 py-1 border rounded"
-                      >
-                        <option>Engineering</option>
-                        <option>Marketing</option>
-                        <option>Sales</option>
-                        <option>HR</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4">
-                      <select 
-                        value={row.status}
-                        onChange={(e) => {
-                          const newData = [...tableData];
-                          newData[i] = { ...row, status: e.target.value };
-                          setTableData(newData);
-                        }}
-                        className="w-full px-2 py-1 border rounded"
-                      >
-                        <option>Active</option>
-                        <option>Inactive</option>
-                      </select>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-6 py-4">{row.name}</td>
-                    <td className="px-6 py-4">{row.email}</td>
-                    <td className="px-6 py-4">{row.department}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        row.status === 'Active' ? 'bg-success/10 text-success' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {row.status}
-                      </span>
-                    </td>
-                  </>
-                )}
+                    ) : (
+                      row[header]
+                    )}
+                  </td>
+                ))}
                 <td className="px-6 py-4">
                   {editingRow === i ? (
                     <div className="flex space-x-2">
@@ -403,6 +375,14 @@ const Index = () => {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex justify-end mt-6">
+        <button 
+          className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+          onClick={() => setCurrentStep('finalize')}>
+          Continue to Submit
+        </button>
       </div>
     </div>
   );
