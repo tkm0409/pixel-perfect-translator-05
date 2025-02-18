@@ -5,6 +5,9 @@ import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 const steps = [
   { id: 'upload', label: 'Upload File', icon: Upload },
@@ -33,6 +36,12 @@ const Index = () => {
     processing: 0,
     total: 0
   });
+  const [editingCell, setEditingCell] = useState<{
+    rowIndex: number;
+    columnName: string;
+    value: string;
+  } | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -142,6 +151,26 @@ const Index = () => {
       return;
     }
     processFiles(files);
+  };
+
+  const handleCellEdit = (rowIndex: number, columnName: string, value: string) => {
+    setEditingCell({ rowIndex, columnName, value });
+  };
+
+  const handleSaveCellEdit = () => {
+    if (editingCell) {
+      const newData = [...tableData];
+      newData[editingCell.rowIndex] = {
+        ...newData[editingCell.rowIndex],
+        [editingCell.columnName]: editingCell.value
+      };
+      setTableData(newData);
+      setEditingCell(null);
+    }
+  };
+
+  const handleSubmitData = () => {
+    setShowSuccessDialog(true);
   };
 
   const renderUploadStep = () => (
@@ -325,52 +354,20 @@ const Index = () => {
                   {header}
                 </th>
               ))}
-              <th className="px-6 py-3 text-left text-gray-500 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {tableData.map((row, i) => (
               <tr key={i} className="bg-white">
                 {headers.map((header, j) => (
-                  <td key={j} className="px-6 py-4">
-                    {editingRow === i ? (
-                      <input 
-                        type="text" 
-                        value={row[header]}
-                        onChange={(e) => {
-                          const newData = [...tableData];
-                          newData[i] = { ...row, [header]: e.target.value };
-                          setTableData(newData);
-                        }}
-                        className="w-full px-2 py-1 border rounded" 
-                      />
-                    ) : (
-                      row[header]
-                    )}
+                  <td 
+                    key={j} 
+                    className="px-6 py-4 cursor-pointer hover:bg-gray-50"
+                    onClick={() => handleCellEdit(i, header, row[header])}
+                  >
+                    {row[header]}
                   </td>
                 ))}
-                <td className="px-6 py-4">
-                  {editingRow === i ? (
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={() => setEditingRow(null)}
-                        className="text-success hover:text-success/80">
-                        <Check size={18} />
-                      </button>
-                      <button 
-                        onClick={() => setEditingRow(null)}
-                        className="text-destructive hover:text-destructive/80">
-                        <X size={18} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => setEditingRow(i)}
-                      className="text-primary hover:text-primary/80">
-                      <Pencil size={18} />
-                    </button>
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -380,10 +377,109 @@ const Index = () => {
       <div className="flex justify-end mt-6">
         <button 
           className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-          onClick={() => setCurrentStep('finalize')}>
-          Continue to Submit
+          onClick={handleSubmitData}>
+          Submit Data
         </button>
       </div>
+
+      <Sheet 
+        open={editingCell !== null} 
+        onOpenChange={(open) => !open && setEditingCell(null)}
+      >
+        <SheetContent className="w-[400px]">
+          <SheetHeader>
+            <SheetTitle>Edit Field</SheetTitle>
+          </SheetHeader>
+          {editingCell && (
+            <div className="mt-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Column heading</label>
+                  <Input
+                    value={editingCell.value}
+                    onChange={(e) => setEditingCell({
+                      ...editingCell,
+                      value: e.target.value
+                    })}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="size-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center">!</span>
+                    Error History
+                  </div>
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm">
+                    No previous errors found for this field.
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setEditingCell(null)}
+                  className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveCellEdit}
+                  className="px-4 py-2 text-sm bg-primary text-white rounded-md hover:bg-primary/90"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 bg-success/10 rounded-full flex items-center justify-center mb-4">
+              <Check className="w-6 h-6 text-success" />
+            </div>
+            <DialogTitle className="text-center">Submission Successful!</DialogTitle>
+            <DialogDescription className="text-center">
+              Your data has been successfully submitted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            <h4 className="font-medium mb-2">🎉 What's Next?</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Your data is now saved and ready for further processing.</li>
+              <li>• The AI model will learn from your corrections to improve future accuracy.</li>
+              <li>• You will receive an email confirmation shortly.</li>
+            </ul>
+          </div>
+
+          <div className="flex justify-center gap-3 mt-6">
+            <button
+              onClick={() => {
+                setShowSuccessDialog(false);
+                setCurrentStep('upload');
+                setFiles([]);
+                setTableData([]);
+              }}
+              className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50"
+            >
+              Upload New File
+            </button>
+            <button
+              className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50"
+            >
+              View Submitted Data
+            </button>
+            <button
+              onClick={() => setShowSuccessDialog(false)}
+              className="px-4 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50"
+            >
+              Go to Dashboard
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
