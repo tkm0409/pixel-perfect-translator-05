@@ -1,13 +1,14 @@
 
 import { Search, Sun, HelpCircle, Bell } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
+import logo from '@/assets/working.png';
 
 const Header = () => {
   return (
     <div className="fixed top-0 left-16 right-0 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 z-10">
       <div className="flex items-center space-x-8">
         <div className="flex items-center space-x-4">
-          <img src="/logo.svg" alt="Manpower" className="h-8" />
+          <img src={logo} alt="Manpower" className="h-8" />
           <h1 className="text-xl font-semibold text-gray-900">Data Management Portal</h1>
         </div>
       </div>
