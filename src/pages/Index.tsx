@@ -1,3 +1,4 @@
+// src/pages/Index.tsx
 import { useState } from 'react';
 import { toast } from 'sonner';
 import AppLayout from '@/components/layout/AppLayout';
@@ -6,8 +7,7 @@ import UploadSection from '@/components/upload/UploadSection';
 import ProcessingSection from '@/components/upload/ProcessingSection';
 import ReviewSection from '@/components/upload/ReviewSection';
 import { processExcelFile, ProcessedData } from '@/utils/excelProcessor';
-import { Download, MonitorCheck, CheckCircle2, XCircle, Clock4, Pencil } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Download, MonitorCheck, CheckCircle2, XCircle, Clock4 } from 'lucide-react';
 
 const Index = () => {
   const [currentStep, setCurrentStep] = useState('upload');
@@ -16,19 +16,6 @@ const Index = () => {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [tableData, setTableData] = useState<Record<string, string>[]>([]);
-  const [processingSummary, setProcessingSummary] = useState({
-    completed: 0,
-    failed: 0,
-    processing: 0,
-    total: 0
-  });
-  const [editingCell, setEditingCell] = useState<{
-    rowIndex: number;
-    columnName: string;
-    value: string;
-  } | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -70,64 +57,42 @@ const Index = () => {
         const progress = (i / files.length) * 100;
         setProgress(progress);
 
-        const file = files[i];
-        const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert to JSON with header row
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        if (jsonData.length > 0) {
-          // First row contains headers
-          const fileHeaders = jsonData[0] as string[];
-          setHeaders(fileHeaders);
-
-          // Process remaining rows
-          const rows = jsonData.slice(1).map((row: any) => {
-            const rowData: Record<string, string> = {};
-            fileHeaders.forEach((header, index) => {
-              rowData[header] = row[index]?.toString() || '';
-            });
-            return rowData;
-          });
-
-          setTableData(rows);
-
-          // Update processing summary
-          const total = rows.length;
-          const completed = rows.filter(row => 
-            Object.values(row).every(val => val !== '')
-          ).length;
-          const failed = rows.filter(row => 
-            Object.values(row).some(val => val === '')
-          ).length;
-
-          setProcessingSummary({
-            completed,
-            failed,
-            processing: total - completed - failed,
-            total
-          });
-        }
+        const data = await processExcelFile(files[i]);
+        setProcessedData(data);
       }
 
-      // Show processing screen for at least 2 seconds
-      await new Promise(resolve => setTimeout(resolve, 2000));
       setProgress(100);
       setCurrentStep('review');
     } catch (error) {
-      console.error('Error processing files:', error);
-      toast.error('Error processing files. Please check the file format.');
+      toast.error('Error processing files: ' + (error as Error).message);
       setCurrentStep('upload');
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleReviewComplete = () => {
-    setCurrentStep('review-records');
+  const handleDataUpdate = (updatedRows: Record<string, string>[]) => {
+    if (processedData) {
+      setProcessedData({
+        ...processedData,
+        rows: updatedRows,
+        summary: {
+          ...processedData.summary,
+          manuallyEdited: processedData.summary.manuallyEdited + 1
+        }
+      });
+    }
+  };
+
+  const handleSubmit = () => {
+    if (processedData?.summary.errorsRemaining === 0) {
+      setCurrentStep('upload');
+      setFiles([]);
+      setProgress(0);
+      setProcessedData(null);
+    } else {
+      toast.error('Please resolve all errors before submitting');
+    }
   };
 
   const renderProcessingStep = () => (
@@ -301,11 +266,6 @@ const Index = () => {
     </div>
   );
 
-  const handleCellEdit = (rowIndex: number, columnName: string, value: string) => {
-    // Implement your cell edit logic here
-    console.log(`Editing cell: Row ${rowIndex}, Column ${columnName}, Value ${value}`);
-  };
-
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-8 mt-6">
@@ -334,53 +294,9 @@ const Index = () => {
         renderProcessingStep()
       )}
 
-      {currentStep === 'review' && (
+      {currentStep === 'review' && processedData && (
         renderReviewStep()
       )}
-
-      {currentStep === 'review-records' && (
-        <div className="p-8">
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  {headers.map((header, index) => (
-                    <th key={index} className="px-6 py-3 text-left text-gray-500 font-medium">
-                      {header}
-                    </th>
-                  ))}
-                  <th className="px-6 py-3 text-left text-gray-500 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {tableData.map((row, i) => (
-                  <tr key={i} className="bg-white">
-                    {headers.map((header, j) => (
-                      <td 
-                        key={j} 
-                        className="px-6 py-4 cursor-pointer hover:bg-gray-50"
-                        onClick={() => handleCellEdit(i, header, row[header])}
-                      >
-                        {row[header]}
-                      </td>
-                    ))}
-                    <td className="px-6 py-4">
-                      <button 
-                        onClick={() => handleCellEdit(i, headers[0], row[headers[0]])}
-                        className="text-primary hover:text-primary/80"
-                      >
-                        <Pencil size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      
     </AppLayout>
   );
 };
