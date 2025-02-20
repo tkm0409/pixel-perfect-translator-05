@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { Pencil } from 'lucide-react';
+import { Pencil, Edit2, PenBoxIcon } from 'lucide-react';
 import EditFieldDialog from './EditFieldDialog';
 
 interface DataTableProps {
@@ -18,6 +18,12 @@ const DataTable = ({ headers, rows, onDataUpdate }: DataTableProps) => {
     value: string;
   } | null>(null);
 
+  const [inlineEditingCell, setInlineEditingCell] = useState<{
+    rowIndex: number;
+    columnName: string;
+    value: string;
+  } | null>(null);
+
   const [hoveredCell, setHoveredCell] = useState<{
     rowIndex: number;
     columnName: string;
@@ -25,6 +31,10 @@ const DataTable = ({ headers, rows, onDataUpdate }: DataTableProps) => {
 
   const handleCellEdit = (rowIndex: number, columnName: string, value: string) => {
     setEditingCell({ rowIndex, columnName, value });
+  };
+
+  const handleInlineCellEdit = (rowIndex: number, columnName: string, value: string) => {
+    setInlineEditingCell({ rowIndex, columnName, value });
   };
 
   const handleSaveCellEdit = () => {
@@ -38,6 +48,70 @@ const DataTable = ({ headers, rows, onDataUpdate }: DataTableProps) => {
       setEditingCell(null);
       toast.success('Cell updated successfully');
     }
+  };
+
+  const handleInlineEditSave = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && inlineEditingCell) {
+      const updatedRows = [...rows];
+      updatedRows[inlineEditingCell.rowIndex] = {
+        ...updatedRows[inlineEditingCell.rowIndex],
+        [inlineEditingCell.columnName]: inlineEditingCell.value
+      };
+      onDataUpdate(updatedRows);
+      setInlineEditingCell(null);
+      toast.success('Cell updated successfully');
+    } else if (e.key === 'Escape') {
+      setInlineEditingCell(null);
+    }
+  };
+
+  const renderCell = (rowIndex: number, columnName: string, value: string) => {
+    if (
+      inlineEditingCell?.rowIndex === rowIndex &&
+      inlineEditingCell?.columnName === columnName
+    ) {
+      return (
+        <Input
+          value={inlineEditingCell.value}
+          onChange={(e) =>
+            setInlineEditingCell({ ...inlineEditingCell, value: e.target.value })
+          }
+          onKeyDown={handleInlineEditSave}
+          autoFocus
+          className="w-full h-8 px-2"
+        />
+      );
+    }
+
+    return (
+      <div className="flex items-center justify-between">
+        <span className={value.includes('text column') ? 'text-gray-500' : ''}>
+          {value}
+        </span>
+        {hoveredCell?.rowIndex === rowIndex && hoveredCell?.columnName === columnName && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+            <div 
+              className="bg-blue-800 p-2 rounded-lg cursor-pointer hover:bg-blue-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCellEdit(rowIndex, columnName, value);
+              }}
+            >
+              <Pencil className="h-4 w-4 text-white" />
+            </div>
+            <div 
+              className="bg-green-600 p-2 rounded-lg cursor-pointer hover:bg-green-500"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleInlineCellEdit(rowIndex, columnName, value);
+              }}
+            >
+              <PenBoxIcon className="h-4 w-4 text-white" />
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -62,21 +136,8 @@ const DataTable = ({ headers, rows, onDataUpdate }: DataTableProps) => {
                   className="px-6 py-4 relative group cursor-pointer hover:bg-gray-50"
                   onMouseEnter={() => setHoveredCell({ rowIndex, columnName: header })}
                   onMouseLeave={() => setHoveredCell(null)}
-                  onClick={() => handleCellEdit(rowIndex, header, row[header])}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={row[header].includes('text column') ? 'text-gray-500' : ''}>
-                      {row[header]}
-                    </span>
-                    {hoveredCell?.rowIndex === rowIndex &&
-                      hoveredCell?.columnName === header && (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="bg-blue-800 p-2 rounded-lg cursor-pointer">
-                            <Pencil className="h-4 w-4 text-white" />
-                          </div>
-                        </div>
-                      )}
-                  </div>
+                  {renderCell(rowIndex, header, row[header])}
                 </td>
               ))}
             </tr>

@@ -82,7 +82,7 @@ const Index = () => {
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          
+
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
           const headers = jsonData[0] as string[];
           const rows = jsonData.slice(1).map(row => {
@@ -156,7 +156,7 @@ const Index = () => {
       // Second pass: process files
       for (const file of files) {
         const result = await processFile(file);
-        
+
         if (headers.length === 0) headers = result.headers;
         allRows.push(...result.rows);
         processedRows += result.rows.length;
@@ -166,7 +166,7 @@ const Index = () => {
         // Update progress and summary
         const progress = (processedRows / totalRows) * 100;
         setProgress(progress);
-        
+
         setProcessingSummary({
           recordsCompleted: processedRows - errorCount,
           recordsFailed: errorCount,
@@ -233,15 +233,9 @@ const Index = () => {
 
   return (
     <AppLayout>
-      <div className="flex items-center justify-between mb-8 mt-6">
-        <select className="bg-blue-50 text-primary px-4 py-2 rounded-lg font-medium">
-          <option>Abbott</option>
-          <option>Other Client</option>
-        </select>
-        <h2 className="text-xl font-semibold">New Data Upload</h2>
+      <div className="p-4">
+        <StepsIndicator currentStep={currentStep} />
       </div>
-
-      <StepsIndicator currentStep={currentStep} />
 
       {currentStep === 'upload' && (
         <UploadSection

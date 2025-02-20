@@ -17,7 +17,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-4 space-y-6">
+    <div className="fixed left-0 top-16 h-full w-16 bg-gray-200/90 border-r border-gray-200 flex flex-col items-center py-4 space-y-6">
       {menuItems.map((item, index) => {
         const Icon = item.icon;
         const isActive = location.pathname === item.href;
@@ -25,7 +25,7 @@ const Sidebar = () => {
           <Link
             key={index}
             to={item.href}
-            className={`p-3 rounded-lg transition-all duration-200 hover:bg-gray-100 ${
+            className={`p-3 rounded-lg transition-all duration-200 hover:bg-blue-100 ${
               isActive ? 'bg-accent text-accent-foreground' : 'text-gray-500'
             }`}
           >
